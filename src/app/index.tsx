@@ -1,10 +1,12 @@
-import { Text, View, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import NewsFeed from "../../components/news-feed";
 
 export default function Index() {
   return (
-    <View style={styles.container}>
-      <Text>Edit src/app/index.tsx to edit this screen.</Text>
-    </View>
+    <SafeAreaView>
+      <NewsFeed />
+    </SafeAreaView>
   );
 }
 
