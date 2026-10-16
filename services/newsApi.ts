@@ -1,4 +1,4 @@
-import { NEWS_API_KEY } from "../config/api";
+import { NEWS_API_KEY, NEWS_API_URL } from "../config/api";
 import { NewsApiResponse } from "../types/news";
 
 export interface FetchNewsParams {
@@ -32,8 +32,12 @@ export const fetchTopHeadlines = async (params: FetchNewsParams = {}) => {
     ...(query && { q: query }),
   });
 
-  const url = `https://newsapi.org/v2/top-headlines?${queryParam.toString()}`;
-
+  const url = `${NEWS_API_URL}/top-headlines?${queryParam.toString()}`;
+  if (!NEWS_API_KEY) {
+    throw new Error(
+      "Please provide a valid NEWS_API_KEY in your environment variables.",
+    );
+  }
   try {
     const response = await fetch(url);
     const data: NewsApiResponse = await response.json();

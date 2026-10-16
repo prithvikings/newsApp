@@ -1,10 +1,11 @@
-import { StyleSheet } from "react-native";
+import { StatusBar, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import NewsFeed from "../../components/news-feed";
 
 export default function Index() {
   return (
-    <SafeAreaView>
+    <SafeAreaView style={{ flex: 1 }}>
+      <StatusBar barStyle={"dark-content"} />
       <NewsFeed />
     </SafeAreaView>
   );

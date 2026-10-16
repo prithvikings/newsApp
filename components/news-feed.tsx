@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,6 +10,7 @@ import {
 } from "react-native";
 import { fetchTopHeadlines } from "../services/newsApi";
 import { NewsArticle } from "../types/news";
+import { Header } from "./header";
 import { NewsCard } from "./news-card";
 
 const NewsFeed = () => {
@@ -22,15 +24,41 @@ const NewsFeed = () => {
   const [category, setCategory] = useState("all");
   const [country, setCountry] = useState("us");
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchMode, setIsSearchMode] = useState(false);
+
   const loadNews = useCallback(
-    async (pageNumber: number = 1, reset: boolean = false) => {
+    async (pageNum: number = 1, reset: boolean = false) => {
       try {
-        const response = await fetchTopHeadlines({
-          page: pageNumber,
+        setLoadingMore(pageNum > 1);
+        if (reset) {
+          setLoading(true);
+        }
+
+        let response = await fetchTopHeadlines({
+          page: pageNum,
           pageSize: 20,
           category: category === "all" ? undefined : category,
           country,
+          query: searchQuery || undefined,
         });
+
+        if (!response) {
+          setError(
+            "API key is missing. Please configure EXPO_PUBLIC_NEWS_API_KEY in your .env file.",
+          );
+          setArticles([]);
+          return;
+        }
+
+        if (!response.articles || response.articles.length === 0) {
+          if (reset) {
+            setArticles([]);
+          }
+          setHasMore(false);
+          setPage(pageNum);
+          return;
+        }
 
         if (reset) {
           setArticles(response.articles);
@@ -39,32 +67,36 @@ const NewsFeed = () => {
         }
 
         setHasMore(
-          response.articles.length > 0 &&
-            pageNumber * 20 < response.totalResults,
+          response.articles.length > 0 && pageNum * 20 < response.totalResults,
         );
 
-        setPage(pageNumber);
+        setPage(pageNum);
+        setError(null);
       } catch (error) {
-        console.error("Error loading news:", error);
-        setError("Failed to load news. Please try again later.");
+        const errorMessage =
+          error instanceof Error ? error.message : "failed to load news";
+        setError(errorMessage);
+        if (reset) {
+          setArticles([]);
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
         setLoadingMore(false);
       }
     },
-    [category, country],
+    [category, country, searchQuery],
   );
 
   useEffect(() => {
     loadNews(1, true);
-  }, [country, category]);
+  }, [loadNews]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
-    loadNews(1, true);
-    setHasMore(true);
     setPage(1);
+    setHasMore(true);
+    setError(null);
     loadNews(1, true);
   }, [loadNews]);
 
@@ -72,7 +104,7 @@ const NewsFeed = () => {
     if (!loadingMore && hasMore && !loading) {
       loadNews(page + 1, false);
     }
-  }, [loadingMore, hasMore, page, loadNews]);
+  }, [loadingMore, hasMore, loading, page, loadNews]);
 
   const handleCategoryChange = (newCategory: string) => {
     setCategory(newCategory);
@@ -86,22 +118,28 @@ const NewsFeed = () => {
     setHasMore(true);
   };
 
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    setPage(1);
+    setHasMore(true);
+    setIsSearchMode(query.length > 0);
+  }, []);
+
   const renderFooter = () => {
     if (!loadingMore) return null;
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="large" color="#6366F1" />
+        <ActivityIndicator size="small" color="#6366F1" />
       </View>
     );
   };
 
   const renderEmpty = () => {
     if (loading) return null;
-
     return (
       <View style={styles.emptyContainer}>
         <Text style={styles.emptyText}>
-          {error || "No news articles found."}
+          {error || "No articles found. Pull down to refresh."}
         </Text>
 
         {error && (
@@ -116,18 +154,54 @@ const NewsFeed = () => {
     );
   };
 
+  if (loading && articles.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Header
+          onSearch={handleSearch}
+          onCategoryChange={handleCategoryChange}
+          onCountryChange={handleCountryChange}
+          selectedCategory={category}
+          selectedCountry={country}
+          searchQuery={searchQuery}
+        />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#6366F1" />
+          <Text style={styles.loadingText}>Loading news...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* TODO: Header */}
+      <Header
+        onSearch={handleSearch}
+        onCategoryChange={handleCategoryChange}
+        onCountryChange={handleCountryChange}
+        selectedCategory={category}
+        selectedCountry={country}
+        searchQuery={searchQuery}
+      />
       <FlatList
         data={articles}
-        keyExtractor={(item, index) => item.url + index}
+        keyExtractor={(item, index) =>
+          item.url + index.toString() || index.toString()
+        }
         renderItem={({ item }) => <NewsCard article={item} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#6366F1"
+            colors={["#6366F1"]}
+          />
+        }
         onEndReached={handleLoadMore}
         onEndReachedThreshold={0.5}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={renderEmpty}
-        contentContainerStyle={styles.listContainer}
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         stickyHeaderIndices={[]}
       />
@@ -140,15 +214,14 @@ export default NewsFeed;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#F9FAFB",
   },
-
-  listContainer: {
+  listContent: {
     paddingVertical: 8,
-    paddingBottom: 16,
+    paddingBottom: 32,
   },
   footerLoader: {
-    paddingVertical: 16,
+    paddingVertical: 20,
     alignItems: "center",
   },
   emptyContainer: {
@@ -156,23 +229,23 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: 60,
-    paddingHorizontal: 20,
+    paddingHorizontal: 32,
     minHeight: 400,
   },
   emptyText: {
     fontSize: 16,
-    color: "#6b7280",
+    color: "#9CA3AF",
     textAlign: "center",
     marginBottom: 16,
   },
   retryButton: {
     backgroundColor: "#6366F1",
-    paddingVertical: 12,
     paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: "#ffffff",
+    color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -180,16 +253,16 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#f9fafb",
+    backgroundColor: "#F9FAFB",
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: "#6b7280",
+    color: "#6B7280",
   },
   helpText: {
     fontSize: 14,
-    color: "#6b7280",
+    color: "#6366F1",
     textAlign: "center",
     marginTop: 8,
     textDecorationLine: "underline",
